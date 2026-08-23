@@ -1,0 +1,85 @@
+name: Build Release AAB
+
+# Tự động chạy mỗi khi push code lên nhánh main - không cần tạo tag thủ công.
+# Vẫn giữ trigger theo tag + chạy tay để linh hoạt khi cần build riêng 1 bản.
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Nếu repo chỉ chứa file zip (thay vì đã giải nén sẵn), tự động giải nén
+      # ra đúng cấu trúc trước khi build. Cho phép bạn chỉ cần upload 1 file zip
+      # lên GitHub thay vì kéo-thả từng thư mục (tránh sót thư mục ẩn .github).
+      - name: Extract project source (nếu repo ở dạng zip)
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Tìm thấy $ZIP_FILE - đang giải nén..."
+            unzip -oq "$ZIP_FILE" -d _extracted
+            # Zip có 1 thư mục gốc (VD: gplx_vn/) chứa toàn bộ project bên trong,
+            # copy nội dung bên trong thư mục đó ra root để flutter build nhận đúng.
+            INNER_DIR=$(find _extracted -maxdepth 1 -mindepth 1 -type d | head -n 1)
+            cp -rf "$INNER_DIR"/. .
+            rm -rf _extracted
+            echo "Đã giải nén xong."
+          else
+            echo "Không có file zip, dùng trực tiếp code đã có trong repo."
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Giải mã keystore từ GitHub Secret (base64) ra file .jks thật
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/release-key.jks
+
+      # Tạo file key.properties từ secrets, build.gradle sẽ đọc file này
+      - name: Create key.properties
+        run: |
+          cat <<EOF > android/key.properties
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=release-key.jks
+          EOF
+
+      - name: Build AAB (App Bundle - dùng để upload Play Console)
+        run: flutter build appbundle --release --build-number=${{ github.run_number }}
+
+      - name: Build APK (dùng để tự cài test trên điện thoại)
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
