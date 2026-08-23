@@ -87,6 +87,13 @@ jobs:
             echo "Đã có đủ khung Android, bỏ qua bước này."
           fi
 
+          # Nâng phiên bản Kotlin Gradle Plugin lên bản mới hơn - bản mặc định đi
+          # kèm "flutter create" hiện đã quá cũ so với yêu cầu của mobile_scanner/
+          # google_mobile_ads. Chỉ đổi số phiên bản Kotlin, giữ nguyên AGP/Gradle
+          # (2 cái đó do flutter create tự chọn khớp nhau sẵn, không đụng vào).
+          sed -i -E 's/(id "org\.jetbrains\.kotlin\.android" version ")[^"]*(")/\12.1.0\2/' android/settings.gradle
+          grep "org.jetbrains.kotlin.android" android/settings.gradle
+
       - name: Install dependencies
         run: flutter pub get
 
