@@ -87,12 +87,18 @@ jobs:
             echo "Đã có đủ khung Android, bỏ qua bước này."
           fi
 
-          # Nâng phiên bản Kotlin Gradle Plugin lên bản mới hơn - bản mặc định đi
-          # kèm "flutter create" hiện đã quá cũ so với yêu cầu của mobile_scanner/
-          # google_mobile_ads. Chỉ đổi số phiên bản Kotlin, giữ nguyên AGP/Gradle
-          # (2 cái đó do flutter create tự chọn khớp nhau sẵn, không đụng vào).
+          # Nâng đồng bộ AGP + Kotlin + Gradle wrapper lên bộ 3 phiên bản đã biết
+          # tương thích với nhau (bản mặc định "flutter create" sinh ra quá cũ,
+          # không đủ mới cho mobile_scanner/google_mobile_ads). Bắt buộc phải nâng
+          # CẢ 3 cùng lúc vì chúng ràng buộc phiên bản lẫn nhau:
+          #   AGP 8.3.0  <->  cần Gradle >= 8.4  <->  Kotlin 2.1.0 tương thích tốt với AGP 8.3.0
+          sed -i -E 's/(id "com\.android\.application" version ")[^"]*(")/\18.3.0\2/' android/settings.gradle
           sed -i -E 's/(id "org\.jetbrains\.kotlin\.android" version ")[^"]*(")/\12.1.0\2/' android/settings.gradle
-          grep "org.jetbrains.kotlin.android" android/settings.gradle
+          sed -i -E 's#(distributionUrl=).*#\1https\\://services.gradle.org/distributions/gradle-8.6-all.zip#' android/gradle/wrapper/gradle-wrapper.properties
+
+          echo "--- Kiểm tra lại phiên bản đã áp dụng ---"
+          grep "com.android.application\|org.jetbrains.kotlin.android" android/settings.gradle
+          grep "distributionUrl" android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Install dependencies
         run: flutter pub get
