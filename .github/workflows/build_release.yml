@@ -91,9 +91,11 @@ jobs:
           # tương thích với nhau (bản mặc định "flutter create" sinh ra quá cũ,
           # không đủ mới cho mobile_scanner/google_mobile_ads). Bắt buộc phải nâng
           # CẢ 3 cùng lúc vì chúng ràng buộc phiên bản lẫn nhau:
-          #   AGP 8.3.0  <->  cần Gradle >= 8.4  <->  Kotlin 2.1.0 tương thích tốt với AGP 8.3.0
+          #   AGP 8.3.0  <->  cần Gradle >= 8.4
+          #   Kotlin 1.9.24 (KHÔNG dùng 2.x - R8 trong AGP 8.3.0 chỉ hỗ trợ tối đa
+          #   Kotlin metadata 2.0.0, dùng Kotlin 2.1.0 sẽ lỗi ở bước minify/R8)
           sed -i -E 's/(id "com\.android\.application" version ")[^"]*(")/\18.3.0\2/' android/settings.gradle
-          sed -i -E 's/(id "org\.jetbrains\.kotlin\.android" version ")[^"]*(")/\12.1.0\2/' android/settings.gradle
+          sed -i -E 's/(id "org\.jetbrains\.kotlin\.android" version ")[^"]*(")/\11.9.24\2/' android/settings.gradle
           sed -i -E 's#(distributionUrl=).*#\1https\\://services.gradle.org/distributions/gradle-8.6-all.zip#' android/gradle/wrapper/gradle-wrapper.properties
 
           echo "--- Kiểm tra lại phiên bản đã áp dụng ---"
