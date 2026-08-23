@@ -48,6 +48,45 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
 
+      # Project thiếu 1 số file khung Android bắt buộc (gradlew, MainActivity.kt,
+      # build.gradle gốc, settings.gradle, res icons/theme...). Dùng chính
+      # "flutter create" (đã có Flutter ở bước trên) để tự sinh bản chuẩn vào thư
+      # mục tạm, rồi chỉ ghép các file CÒN THIẾU vào project - không đụng tới
+      # AndroidManifest.xml hay app/build.gradle đã tùy biến sẵn (AdMob, ký app...).
+      - name: Bổ sung khung Android còn thiếu (nếu cần)
+        run: |
+          if [ ! -f android/gradlew ]; then
+            echo "Thiếu khung Android gốc - đang tự sinh bổ sung..."
+            flutter create --platforms=android --org com.gplxvn --project-name app /tmp/scaffold_app > /dev/null
+
+            # Gradle wrapper - bắt buộc để build được, không có phần tùy biến gì nên copy thẳng
+            mkdir -p android/gradle/wrapper
+            cp /tmp/scaffold_app/android/gradlew android/gradlew
+            cp /tmp/scaffold_app/android/gradlew.bat android/gradlew.bat
+            cp /tmp/scaffold_app/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
+            cp /tmp/scaffold_app/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
+            chmod +x android/gradlew
+
+            # File cấu hình gốc của project Android (không tùy biến gì, dùng bản chuẩn)
+            cp -n /tmp/scaffold_app/android/build.gradle android/build.gradle 2>/dev/null || true
+            cp -n /tmp/scaffold_app/android/settings.gradle android/settings.gradle 2>/dev/null || true
+            cp -n /tmp/scaffold_app/android/gradle.properties android/gradle.properties 2>/dev/null || true
+
+            # MainActivity.kt - bắt buộc phải có cho Android v2 embedding, đây là
+            # lỗi chính xác gây ra "deleted Android v1 embedding" ở lần build trước
+            mkdir -p android/app/src/main/kotlin/com/gplxvn/app
+            printf 'package com.gplxvn.app\n\nimport io.flutter.embedding.android.FlutterActivity\n\nclass MainActivity : FlutterActivity()\n' > android/app/src/main/kotlin/com/gplxvn/app/MainActivity.kt
+
+            # Theme (LaunchTheme/NormalTheme) + icon mặc định - AndroidManifest.xml
+            # của ta đang tham chiếu tới các resource này
+            mkdir -p android/app/src/main/res
+            cp -rn /tmp/scaffold_app/android/app/src/main/res/. android/app/src/main/res/
+
+            echo "Đã bổ sung xong khung Android."
+          else
+            echo "Đã có đủ khung Android, bỏ qua bước này."
+          fi
+
       - name: Install dependencies
         run: flutter pub get
 
