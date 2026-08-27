@@ -98,6 +98,9 @@ jobs:
       - name: Cài dependencies
         run: flutter pub get
 
+      - name: Tạo app icon (flutter_launcher_icons)
+        run: dart run flutter_launcher_icons
+
       - name: Build APK (release)
         run: flutter build apk --release
 
