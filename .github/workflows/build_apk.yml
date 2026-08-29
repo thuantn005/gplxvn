@@ -59,7 +59,7 @@ jobs:
           if [ ! -d "android" ]; then
             cp pubspec.yaml /tmp/pubspec.yaml.bak
             cp -r lib /tmp/lib.bak
-            flutter create --platforms=android --org com.thuantn005 --project-name seed_batch_tracker .
+            flutter create --platforms=android --org vn.lotto535 --project-name chiagiai_watcher .
             cp /tmp/pubspec.yaml.bak pubspec.yaml
             rm -rf lib
             cp -r /tmp/lib.bak lib
@@ -67,10 +67,7 @@ jobs:
             echo "android/ đã tồn tại, bỏ qua."
           fi
 
-      # Ghim đúng version Gradle/AGP/Kotlin đã biết chạy ổn định (giống cấu
-      # hình app "Ôn Thi GPLX" trước đó: AGP 8.3.0, Kotlin 1.9.24, Gradle 8.6)
-      # thay vì để mặc định flutter create tự chọn (có thể đổi theo từng
-      # bản Flutter, dễ gây lỗi build không lường trước).
+      # Ghim đúng version Gradle/AGP/Kotlin đã biết chạy ổn định.
       - name: Ghim version Gradle/AGP/Kotlin (AGP 8.3.0, Kotlin 1.9.24, Gradle 8.6)
         run: |
           SETTINGS="android/settings.gradle"
@@ -85,13 +82,15 @@ jobs:
           echo "--- gradle-wrapper.properties ---"
           cat "$WRAPPER"
 
-      # Thêm quyền Internet vào AndroidManifest.xml (app cần gọi GitHub API
-      # để đồng bộ dữ liệu). Chỉ thêm nếu chưa có, tránh thêm trùng lặp.
-      - name: Thêm quyền Internet vào AndroidManifest
+      # Thêm quyền Internet + thông báo (Android 13+) vào AndroidManifest.
+      - name: Thêm quyền Internet + thông báo vào AndroidManifest
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
             sed -i 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />#' "$MANIFEST"
+          fi
+          if ! grep -q "android.permission.POST_NOTIFICATIONS" "$MANIFEST"; then
+            sed -i 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />#' "$MANIFEST"
           fi
           cat "$MANIFEST"
 
@@ -109,7 +108,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: seed-batch-tracker-apk
+          name: chiagiai-watcher-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
