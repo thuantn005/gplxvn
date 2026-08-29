@@ -82,6 +82,17 @@ jobs:
           echo "--- gradle-wrapper.properties ---"
           cat "$WRAPPER"
 
+      # 3 plugin (flutter_local_notifications, path_provider_android,
+      # workmanager) yeu cau NDK 25.1.8937393, cao hon ban Flutter tu chon
+      # mac dinh -> ghim thang NDK nay de tranh warning/loi thieu NDK.
+      - name: Ghim Android NDK 25.1.8937393
+        run: |
+          APP_GRADLE="android/app/build.gradle"
+          if ! grep -q "ndkVersion" "$APP_GRADLE"; then
+            sed -i '/^android {/a\    ndkVersion = "25.1.8937393"' "$APP_GRADLE"
+          fi
+          cat "$APP_GRADLE"
+
       # Thêm quyền Internet + thông báo (Android 13+) vào AndroidManifest.
       - name: Thêm quyền Internet + thông báo vào AndroidManifest
         run: |
