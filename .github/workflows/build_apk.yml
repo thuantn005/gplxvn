@@ -88,9 +88,33 @@ jobs:
       - name: Ghim Android NDK 25.1.8937393
         run: |
           APP_GRADLE="android/app/build.gradle"
-          if ! grep -q "ndkVersion" "$APP_GRADLE"; then
+          if grep -q "ndkVersion" "$APP_GRADLE"; then
+            sed -i 's/ndkVersion[[:space:]]*=.*/ndkVersion = "25.1.8937393"/' "$APP_GRADLE"
+          else
             sed -i '/^android {/a\    ndkVersion = "25.1.8937393"' "$APP_GRADLE"
           fi
+          cat "$APP_GRADLE"
+
+      # flutter_local_notifications yêu cầu bật "core library desugaring"
+      # (báo lỗi checkReleaseAarMetadata nếu thiếu) -> tự thêm cấu hình
+      # compileOptions.coreLibraryDesugaringEnabled + dependency
+      # desugar_jdk_libs vào build.gradle.
+      - name: Bật Core Library Desugaring (flutter_local_notifications yêu cầu)
+        run: |
+          APP_GRADLE="android/app/build.gradle"
+
+          if ! grep -q "coreLibraryDesugaringEnabled" "$APP_GRADLE"; then
+            sed -i '/compileOptions {/a\        coreLibraryDesugaringEnabled true' "$APP_GRADLE"
+          fi
+
+          if ! grep -q "desugar_jdk_libs" "$APP_GRADLE"; then
+            if grep -q "^dependencies {}" "$APP_GRADLE"; then
+              sed -i 's/^dependencies {}/dependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}/' "$APP_GRADLE"
+            else
+              sed -i '/^dependencies {/a\    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"' "$APP_GRADLE"
+            fi
+          fi
+
           cat "$APP_GRADLE"
 
       # Thêm quyền Internet + thông báo (Android 13+) vào AndroidManifest.
