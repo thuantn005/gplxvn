@@ -30,7 +30,21 @@ jobs:
               exit 1
             fi
             PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
-            echo "Project nằm ở: $PROJECT_DIR -> copy ra thư mục gốc repo"
+            echo "Project nằm ở: $PROJECT_DIR"
+
+            # Xóa sạch code cũ trong repo trước khi copy code mới vào -
+            # tránh trường hợp zip mới đã xóa/đổi tên file .dart nào đó mà
+            # file cũ vẫn còn sót lại trong repo, lẫn vào lúc build. Chỉ
+            # giữ lại .git, .github (chứa chính workflow này) và file .zip
+            # đang được xử lý; mọi thứ khác ở gốc repo đều bị xóa.
+            echo "Xóa code cũ trong repo (giữ .git, .github, file zip)..."
+            find . -maxdepth 1 -mindepth 1 \
+              ! -name ".git" \
+              ! -name ".github" \
+              ! -name "$(basename "$ZIP_FILE")" \
+              -exec rm -rf {} +
+
+            echo "Copy code mới ra thư mục gốc repo"
             cp -r "$PROJECT_DIR"/. .
           else
             echo "Không có file .zip nào ở gốc repo, dùng code hiện có trong repo."
