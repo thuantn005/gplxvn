@@ -301,6 +301,21 @@ jobs:
           fi
           cat "$MANIFEST"
 
+      # Plugin workmanager (0.5.2) kéo về androidx.work:work-runtime-ktx:2.7.1,
+      # trong khi 1 lib khác trong project lại kéo về
+      # androidx.work:work-runtime:2.8.1 -> 2 version khác nhau của cùng 1
+      # nhóm thư viện chứa các class trùng tên (OneTimeWorkRequestKt,
+      # PeriodicWorkRequestKt) -> lỗi "Duplicate class" khi build release
+      # (task checkReleaseDuplicateClasses). Ép toàn bộ project chỉ dùng
+      # đúng 1 version (2.8.1, bản mới nhất trong 2 bản) để tránh xung đột.
+      - name: Ép version androidx.work (fix Duplicate class work-runtime)
+        run: |
+          APP_GRADLE="android/app/build.gradle"
+          if ! grep -q "work-runtime-ktx" "$APP_GRADLE"; then
+            printf '\ndependencies {\n    implementation("androidx.work:work-runtime-ktx:2.8.1") {\n        force = true\n    }\n}\n' >> "$APP_GRADLE"
+          fi
+          cat "$APP_GRADLE"
+
       - name: Cài dependencies
         run: flutter pub get
 
