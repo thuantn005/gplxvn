@@ -1,9 +1,7 @@
 name: Build APK
 
-# Chạy khi push code lên nhánh main, hoặc bấm chạy tay từ tab Actions trên GitHub.
+# Chỉ chạy khi bấm chạy tay từ tab Actions trên GitHub.
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch: {}
 
 jobs:
@@ -312,7 +310,7 @@ jobs:
         run: |
           APP_GRADLE="android/app/build.gradle"
           if ! grep -q "work-runtime-ktx" "$APP_GRADLE"; then
-            printf '\ndependencies {\n    implementation("androidx.work:work-runtime-ktx:2.8.1") {\n        force = true\n    }\n}\n' >> "$APP_GRADLE"
+            printf '\nconfigurations.all {\n    exclude group: "androidx.work", module: "work-runtime-ktx"\n}\n' >> "$APP_GRADLE"
           fi
           cat "$APP_GRADLE"
 
