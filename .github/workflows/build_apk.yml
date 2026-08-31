@@ -73,7 +73,7 @@ jobs:
           if [ ! -d "android" ]; then
             cp pubspec.yaml /tmp/pubspec.yaml.bak
             cp -r lib /tmp/lib.bak
-            flutter create --platforms=android --org vn.lotto535 --project-name chiagiai_watcher .
+            flutter create --platforms=android --org jp.devjlog --project-name vn .
             cp /tmp/pubspec.yaml.bak pubspec.yaml
             rm -rf lib
             cp -r /tmp/lib.bak lib
@@ -160,6 +160,147 @@ jobs:
           fi
           cat "$MANIFEST"
 
+      # "flutter create" đặt tên hiển thị mặc định = --project-name (ở đây
+      # là "vn", chỉ dùng để ghép applicationId thành jp.devjlog.vn), nên
+      # cần ghi đè lại tên hiển thị thật của app.
+      - name: Đặt tên hiển thị app (Săn Chia Giải 535)
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          sed -i 's/android:label="[^"]*"/android:label="Săn Chia Giải 535"/' "$MANIFEST"
+          cat "$MANIFEST"
+
+      # AdMob BẮT BUỘC phải có thẻ meta-data này trong <application>, nếu
+      # không app sẽ crash ngay khi khởi động MobileAds.instance.initialize().
+      # ⚠️ ĐANG DÙNG APP ID TEST CỦA GOOGLE — thay bằng App ID thật từ tài
+      # khoản AdMob của bạn trước khi phát hành (admob.google.com > Apps >
+      # App settings > App ID). Dùng ID test khi đã publish có thể bị
+      # AdMob coi là gian lận traffic và khoá tài khoản.
+      - name: Thêm AdMob App ID vào AndroidManifest
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
+            sed -i 's#</application>#    <meta-data\n        android:name="com.google.android.gms.ads.APPLICATION_ID"\n        android:value="ca-app-pub-3940256099942544~3347511713" />\n</application>#' "$MANIFEST"
+          fi
+          cat "$MANIFEST"
+
+      # Widget màn hình chính Android (hiện giá trị Độc Đắc + kỳ quay gần
+      # nhất, không cần mở app). Vì thư mục android/ KHÔNG được lưu sẵn
+      # trong repo (CI tự "flutter create" sinh lại mỗi lần build ở bước
+      # trên), code Kotlin/XML của widget phải được ghi ra LẠI Ở ĐÂY mỗi
+      # lần build — package Kotlin phải khớp applicationId "jp.devjlog.vn".
+      - name: Thêm Home Screen Widget (giá trị Độc Đắc)
+        run: |
+          KOTLIN_DIR="android/app/src/main/kotlin/jp/devjlog/vn"
+          RES="android/app/src/main/res"
+          mkdir -p "$KOTLIN_DIR" "$RES/layout" "$RES/xml" "$RES/drawable"
+
+          cat > "$KOTLIN_DIR/JackpotWidgetProvider.kt" << 'KOTLIN_EOF'
+          package jp.devjlog.vn
+
+          import android.appwidget.AppWidgetManager
+          import android.content.Context
+          import android.content.SharedPreferences
+          import android.widget.RemoteViews
+          import es.antonborri.home_widget.HomeWidgetLaunchIntent
+          import es.antonborri.home_widget.HomeWidgetProvider
+
+          /**
+           * Widget man hinh chinh: hien gia tri giai Doc Dac + ky quay gan
+           * nhat. Du lieu duoc Flutter ghi qua goi home_widget moi khi kiem
+           * tra xong (thu cong hoac nen) - widget nay chi doc lai va ve ra,
+           * khong tu goi mang.
+           */
+          class JackpotWidgetProvider : HomeWidgetProvider() {
+              override fun onUpdate(
+                  context: Context,
+                  appWidgetManager: AppWidgetManager,
+                  appWidgetIds: IntArray,
+                  widgetData: SharedPreferences,
+              ) {
+                  appWidgetIds.forEach { widgetId ->
+                      val views = RemoteViews(context.packageName, R.layout.jackpot_widget_layout).apply {
+                          val jackpot = widgetData.getString("widget_jackpot", null) ?: "—"
+                          val drawLabel = widgetData.getString("widget_draw_label", null) ?: "Săn Chia Giải 535"
+                          val nextDraw = widgetData.getString("widget_next_draw", null) ?: ""
+
+                          setTextViewText(R.id.widget_jackpot_value, jackpot)
+                          setTextViewText(R.id.widget_draw_label, drawLabel)
+                          setTextViewText(R.id.widget_next_draw, nextDraw)
+
+                          val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java)
+                          setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                      }
+                      appWidgetManager.updateAppWidget(widgetId, views)
+                  }
+              }
+          }
+          KOTLIN_EOF
+
+          cat > "$RES/layout/jackpot_widget_layout.xml" << 'XML_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:id="@+id/widget_root"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:padding="14dp"
+              android:background="@drawable/widget_background">
+
+              <TextView
+                  android:id="@+id/widget_draw_label"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Săn Chia Giải 535"
+                  android:textColor="#FFFFF7E8"
+                  android:textSize="11sp" />
+
+              <TextView
+                  android:id="@+id/widget_jackpot_value"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="4dp"
+                  android:text="—"
+                  android:textColor="#FFFFFFFF"
+                  android:textStyle="bold"
+                  android:textSize="18sp" />
+
+              <TextView
+                  android:id="@+id/widget_next_draw"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="4dp"
+                  android:text=""
+                  android:textColor="#FFFFF7E8"
+                  android:textSize="11sp" />
+          </LinearLayout>
+          XML_EOF
+
+          cat > "$RES/drawable/widget_background.xml" << 'XML_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <solid android:color="#FFA61C1C" />
+              <corners android:radius="16dp" />
+          </shape>
+          XML_EOF
+
+          cat > "$RES/xml/jackpot_widget_info.xml" << 'XML_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+              android:minWidth="180dp"
+              android:minHeight="90dp"
+              android:updatePeriodMillis="10800000"
+              android:initialLayout="@layout/jackpot_widget_layout"
+              android:resizeMode="horizontal|vertical"
+              android:widgetCategory="home_screen" />
+          XML_EOF
+
+          # Dang ky receiver trong AndroidManifest.
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "JackpotWidgetProvider" "$MANIFEST"; then
+            sed -i 's#</application>#    <receiver\n        android:name="jp.devjlog.vn.JackpotWidgetProvider"\n        android:exported="true">\n        <intent-filter>\n            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n        </intent-filter>\n        <meta-data\n            android:name="android.appwidget.provider"\n            android:resource="@xml/jackpot_widget_info" />\n    </receiver>\n</application>#' "$MANIFEST"
+          fi
+          cat "$MANIFEST"
+
       - name: Cài dependencies
         run: flutter pub get
 
@@ -174,7 +315,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chiagiai-watcher-apk
+          name: san-giai-535-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
