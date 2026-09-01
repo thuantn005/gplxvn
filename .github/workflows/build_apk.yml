@@ -79,6 +79,21 @@ jobs:
             echo "android/ đã tồn tại, bỏ qua."
           fi
 
+      # File này KHÔNG được commit vào repo (chứa thông tin project Firebase) —
+      # nên phải ghi ra tại đây, từ 1 GitHub Secret dạng base64. Tạo secret:
+      # Settings > Secrets and variables > Actions > New repository secret,
+      # tên GOOGLE_SERVICES_JSON_BASE64, giá trị = lệnh
+      # `base64 -w0 google-services.json` chạy trên máy bạn (Linux/macOS;
+      # trên Windows dùng PowerShell: [Convert]::ToBase64String((Get-Content
+      # google-services.json -Encoding Byte))).
+      - name: Ghi google-services.json (từ GitHub Secret)
+        run: |
+          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
+            echo "LỖI: chưa tạo secret GOOGLE_SERVICES_JSON_BASE64 — xem hướng dẫn trong comment ở bước này."
+            exit 1
+          fi
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+
       # Ghim đúng version Gradle/AGP/Kotlin đã biết chạy ổn định.
       - name: Ghim version Gradle/AGP/Kotlin (AGP 8.3.0, Kotlin 1.9.24, Gradle 8.6)
         run: |
@@ -93,6 +108,24 @@ jobs:
           cat "$SETTINGS"
           echo "--- gradle-wrapper.properties ---"
           cat "$WRAPPER"
+
+      # Gradle plugin của Firebase — đọc google-services.json vừa ghi ở
+      # trên rồi sinh cấu hình kết nối app vào đúng project Firebase.
+      - name: Thêm Google Services Gradle plugin
+        run: |
+          SETTINGS="android/settings.gradle"
+          APP_GRADLE="android/app/build.gradle"
+
+          if ! grep -q "com.google.gms.google-services" "$SETTINGS"; then
+            sed -i '/id "org.jetbrains.kotlin.android" version "1.9.24" apply false/a\    id "com.google.gms.google-services" version "4.4.2" apply false' "$SETTINGS"
+          fi
+
+          if ! grep -q "com.google.gms.google-services" "$APP_GRADLE"; then
+            sed -i '/id "dev.flutter.flutter-gradle-plugin"/a\    id "com.google.gms.google-services"' "$APP_GRADLE"
+          fi
+
+          echo "--- settings.gradle ---"; cat "$SETTINGS"
+          echo "--- app/build.gradle ---"; cat "$APP_GRADLE"
 
       # 3 plugin (flutter_local_notifications, path_provider_android,
       # workmanager) yeu cau NDK 25.1.8937393, cao hon ban Flutter tu chon
