@@ -279,11 +279,15 @@ jobs:
 
               <TextView
                   android:id="@+id/widget_draw_label"
-                  android:layout_width="wrap_content"
+                  android:layout_width="match_parent"
                   android:layout_height="wrap_content"
                   android:text="Săn Chia Giải 535"
                   android:textColor="#FFFFF7E8"
-                  android:textSize="11sp" />
+                  android:textSize="11sp"
+                  android:shadowColor="#B0000000"
+                  android:shadowRadius="3"
+                  android:shadowDx="0"
+                  android:shadowDy="1" />
 
               <TextView
                   android:id="@+id/widget_jackpot_value"
@@ -293,7 +297,11 @@ jobs:
                   android:text="—"
                   android:textColor="#FFFFFFFF"
                   android:textStyle="bold"
-                  android:textSize="18sp" />
+                  android:textSize="18sp"
+                  android:shadowColor="#B0000000"
+                  android:shadowRadius="3"
+                  android:shadowDx="0"
+                  android:shadowDy="1" />
 
               <TextView
                   android:id="@+id/widget_next_draw"
@@ -302,14 +310,18 @@ jobs:
                   android:layout_marginTop="4dp"
                   android:text=""
                   android:textColor="#FFFFF7E8"
-                  android:textSize="11sp" />
+                  android:textSize="11sp"
+                  android:shadowColor="#B0000000"
+                  android:shadowRadius="3"
+                  android:shadowDx="0"
+                  android:shadowDy="1" />
           </LinearLayout>
           XML_EOF
 
           cat > "$RES/drawable/widget_background.xml" << 'XML_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <solid android:color="#FFA61C1C" />
+              <solid android:color="#99A61C1C" />
               <corners android:radius="16dp" />
           </shape>
           XML_EOF
@@ -352,6 +364,12 @@ jobs:
 
       - name: Tạo app icon (flutter_launcher_icons)
         run: dart run flutter_launcher_icons
+
+      # Man hinh splash NATIVE - chay SAU buoc icon o tren vi splash generator
+      # doc anh tu asset (khong lien quan icon vua sinh), nhung can chay
+      # truoc build de kip ghi vao android/ moi duoc "flutter create" lai.
+      - name: Tạo màn hình splash (flutter_native_splash)
+        run: dart run flutter_native_splash:create
 
       - name: Build APK (release)
         run: flutter build apk --release
