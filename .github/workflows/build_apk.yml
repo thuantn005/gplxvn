@@ -272,9 +272,8 @@ jobs:
           <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:id="@+id/widget_root"
               android:layout_width="match_parent"
-              android:layout_height="wrap_content"
+              android:layout_height="match_parent"
               android:orientation="vertical"
-              android:gravity="center_vertical"
               android:padding="14dp"
               android:background="@drawable/widget_background">
 
@@ -331,11 +330,7 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
               android:minWidth="180dp"
-              android:minHeight="64dp"
-              android:minResizeWidth="140dp"
-              android:minResizeHeight="64dp"
-              android:targetCellWidth="3"
-              android:targetCellHeight="1"
+              android:minHeight="90dp"
               android:updatePeriodMillis="10800000"
               android:initialLayout="@layout/jackpot_widget_layout"
               android:resizeMode="horizontal|vertical"
