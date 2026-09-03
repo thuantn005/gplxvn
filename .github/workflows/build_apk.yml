@@ -321,7 +321,7 @@ jobs:
           cat > "$RES/drawable/widget_background.xml" << 'XML_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <solid android:color="#FFA61C1C" />
+              <solid android:color="#99A61C1C" />
               <corners android:radius="16dp" />
           </shape>
           XML_EOF
