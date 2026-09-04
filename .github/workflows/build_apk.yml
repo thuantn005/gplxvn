@@ -202,12 +202,15 @@ jobs:
 
       # AdMob BẮT BUỘC phải có thẻ meta-data này trong <application>, nếu
       # không app sẽ crash ngay khi khởi động MobileAds.instance.initialize().
-      # App ID THẬT từ tài khoản AdMob (app "Săn Chia Giải 535").
+      # ⚠️ ĐANG DÙNG APP ID TEST CỦA GOOGLE — thay bằng App ID thật từ tài
+      # khoản AdMob của bạn trước khi phát hành (admob.google.com > Apps >
+      # App settings > App ID). Dùng ID test khi đã publish có thể bị
+      # AdMob coi là gian lận traffic và khoá tài khoản.
       - name: Thêm AdMob App ID vào AndroidManifest
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
-            sed -i 's#</application>#    <meta-data\n        android:name="com.google.android.gms.ads.APPLICATION_ID"\n        android:value="ca-app-pub-9611577327028569~2677067517" />\n</application>#' "$MANIFEST"
+            sed -i 's#</application>#    <meta-data\n        android:name="com.google.android.gms.ads.APPLICATION_ID"\n        android:value="ca-app-pub-3940256099942544~3347511713" />\n</application>#' "$MANIFEST"
           fi
           cat "$MANIFEST"
 
@@ -318,7 +321,7 @@ jobs:
           cat > "$RES/drawable/widget_background.xml" << 'XML_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <solid android:color="#FFA61C1C" />
+              <solid android:color="#99A61C1C" />
               <corners android:radius="16dp" />
           </shape>
           XML_EOF
@@ -368,65 +371,8 @@ jobs:
       - name: Tạo màn hình splash (flutter_native_splash)
         run: dart run flutter_native_splash:create
 
-      # KÝ RELEASE BẰNG KEYSTORE THẬT (thay vì debug key mặc định) - bắt
-      # buộc để nộp lên OPPO App Market (và mọi kho ứng dụng nghiêm túc
-      # khác đều từ chối file ký debug). Keystore được lưu dưới dạng base64
-      # trong GitHub Secret (KHÔNG commit file .jks vào repo - lộ ra là mất
-      # quyền kiểm soát app), giải mã ra file tạm ngay trong lần chạy này,
-      # không lưu lại giữa các lần build.
-      #
-      # QUAN TRỌNG: giữ file .jks gốc và 4 secret này thật kỹ. Mất là
-      # KHÔNG THỂ cập nhật app cũ trên OPPO Market nữa (chữ ký không khớp
-      # bản đã nộp trước đó) - phải tạo app mới, người dùng cũ phải gỡ cài
-      # thủ công rồi cài lại từ đầu.
-      - name: Giải mã keystore ký release
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          set -e
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Thiếu secret KEYSTORE_BASE64 - không thể ký release. Vào Settings > Secrets and variables > Actions để thêm."
-            exit 1
-          fi
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release-keystore.jks
-
-      - name: Cấu hình ký release trong build.gradle
-        run: |
-          set -e
-          APP_GRADLE="android/app/build.gradle"
-
-          if ! grep -q "signingConfigs {" "$APP_GRADLE"; then
-            sed -i '/^android {/a\    signingConfigs {\n        release {\n            storeFile file("release-keystore.jks")\n            storePassword System.getenv("KEYSTORE_PASSWORD")\n            keyAlias System.getenv("KEY_ALIAS")\n            keyPassword System.getenv("KEY_PASSWORD")\n        }\n    }' "$APP_GRADLE"
-          fi
-
-          # Flutter mac dinh sinh "signingConfig signingConfigs.debug" trong
-          # buildTypes.release (de "flutter run --release" chay duoc ngay
-          # khong can cau hinh gi) - doi sang signingConfigs.release vua
-          # them o tren.
-          sed -i 's/signingConfig signingConfigs\.debug/signingConfig signingConfigs.release/' "$APP_GRADLE"
-
-          cat "$APP_GRADLE"
-
       - name: Build APK (release)
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: flutter build apk --release
-
-      # OPPO App Market (va nhieu kho ung dung khac) hoi van tay chu ky
-      # (SHA-1/SHA-256) luc dang ky app - in san ra day de khoi phai tu
-      # chay keytool tren may rieng.
-      - name: In vân tay chữ ký (cần khi đăng ký OPPO App Market)
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: |
-          keytool -list -v \
-            -keystore android/app/release-keystore.jks \
-            -alias "$KEY_ALIAS" \
-            -storepass "$KEYSTORE_PASSWORD" \
-            | grep -E "SHA1:|SHA256:|Owner:"
 
       # Upload APK làm artifact của lần chạy này -> tải về từ tab Actions,
       # không cần cấu hình gì thêm.
