@@ -1,448 +1,96 @@
-name: Build APK
+name: Build APK (San Chia Giai 535)
 
-# Chỉ chạy khi bấm chạy tay từ tab Actions trên GitHub.
+# Toan bo qua trinh build chay TREN GITHUB ACTIONS, khong can may local co
+# Flutter/Android SDK gi ca (dung nhu cach lam voi repo lotto-scan). Chi
+# can push code (lib/, pubspec.yaml) qua zip upload nhu thuong le, workflow
+# nay se tu:
+#   1. Neu chua co android/ (du an moi tinh) -> chay `flutter create .` de
+#      Flutter SDK tu sinh toan bo khung Android/iOS chuan (khong tu tay
+#      viet cac file Gradle de tranh sai sot).
+#   2. Ghi de lib/ va pubspec.yaml bang ban trong repo (buoc 1 co the tao
+#      pubspec.yaml/lib mac dinh, can ghi de lai bang ban that).
+#   3. Neu co secret GOOGLE_SERVICES_JSON -> ghi vao android/app/ va tu
+#      dong bat plugin Google Services (Firebase/FCM) trong Gradle.
+#   4. flutter pub get -> flutter build apk --release.
+#   5. Upload APK lam artifact + tao GitHub Release.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build_apk.yml'
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Nếu repo có sẵn 1 file .zip (bạn chỉ cần up đúng file zip project lên
-      # repo, không cần tự giải nén thủ công) -> tự tìm và giải nén ra, lấy
-      # đúng thư mục chứa pubspec.yaml (dù zip có bọc 1 lớp thư mục con hay
-      # không) rồi copy đè ra thư mục gốc của repo để build tiếp.
-      - name: Tự tìm và giải nén file .zip (nếu có)
-        run: |
-          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n1)
-          if [ -n "$ZIP_FILE" ]; then
-            echo "Tìm thấy zip: $ZIP_FILE -> đang giải nén..."
-            rm -rf /tmp/extracted && mkdir -p /tmp/extracted
-            unzip -o "$ZIP_FILE" -d /tmp/extracted > /dev/null
-            PUBSPEC_PATH=$(find /tmp/extracted -maxdepth 4 -name "pubspec.yaml" | head -n1)
-            if [ -z "$PUBSPEC_PATH" ]; then
-              echo "LỖI: không tìm thấy pubspec.yaml trong file zip."
-              exit 1
-            fi
-            PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
-            echo "Project nằm ở: $PROJECT_DIR"
-
-            # Xóa sạch code cũ trong repo trước khi copy code mới vào -
-            # tránh trường hợp zip mới đã xóa/đổi tên file .dart nào đó mà
-            # file cũ vẫn còn sót lại trong repo, lẫn vào lúc build. Chỉ
-            # giữ lại .git, .github (chứa chính workflow này) và file .zip
-            # đang được xử lý; mọi thứ khác ở gốc repo đều bị xóa.
-            echo "Xóa code cũ trong repo (giữ .git, .github, file zip)..."
-            find . -maxdepth 1 -mindepth 1 \
-              ! -name ".git" \
-              ! -name ".github" \
-              ! -name "$(basename "$ZIP_FILE")" \
-              -exec rm -rf {} +
-
-            echo "Copy code mới ra thư mục gốc repo"
-            cp -r "$PROJECT_DIR"/. .
-          else
-            echo "Không có file .zip nào ở gốc repo, dùng code hiện có trong repo."
-          fi
-
-      - name: Setup Java (cần cho Android build)
-        uses: actions/setup-java@v4
+      - uses: subosito/flutter-action@v2
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          channel: stable
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.0'
-          channel: 'stable'
-          cache: true
-
-      # Project này chỉ chứa code Dart (lib/, pubspec.yaml). Nếu chưa có
-      # khung Android (android/ folder với Gradle, AndroidManifest...),
-      # tự tạo ngay tại đây bằng chính Flutter SDK - không cần bạn làm gì
-      # thủ công trước. Backup pubspec.yaml + lib/ trước, restore lại sau
-      # để đảm bảo chắc chắn không bị "flutter create" ghi đè code đã có.
-      - name: Tạo khung Android (nếu chưa có)
+      - name: Sinh khung Android/iOS neu chua co (lan build dau tien)
         run: |
-          if [ ! -d "android" ]; then
-            cp pubspec.yaml /tmp/pubspec.yaml.bak
-            cp -r lib /tmp/lib.bak
-            flutter create --platforms=android --org jp.devjlog --project-name vn .
-            cp /tmp/pubspec.yaml.bak pubspec.yaml
-            rm -rf lib
-            cp -r /tmp/lib.bak lib
+          set -e
+          if [ ! -d android ]; then
+            echo "Chua co thu muc android/ - chay flutter create de Flutter SDK tu sinh khung chuan..."
+            mkdir -p /tmp/scaffold
+            flutter create --org com.thuantn005 --project-name gplxvn /tmp/scaffold
+            cp -r /tmp/scaffold/android .
+            cp -r /tmp/scaffold/ios . || true
+            echo "Da sinh xong khung android/ (va ios/ neu co)."
           else
-            echo "android/ đã tồn tại, bỏ qua."
+            echo "Da co android/ san - bo qua buoc sinh khung."
           fi
 
-      # File này KHÔNG được commit vào repo (chứa thông tin project Firebase) —
-      # nên phải ghi ra tại đây, từ 1 GitHub Secret dạng base64. Tạo secret:
-      # Settings > Secrets and variables > Actions > New repository secret,
-      # tên GOOGLE_SERVICES_JSON_BASE64, giá trị = lệnh
-      # `base64 -w0 google-services.json` chạy trên máy bạn (Linux/macOS;
-      # trên Windows dùng PowerShell: [Convert]::ToBase64String((Get-Content
-      # google-services.json -Encoding Byte))).
-      - name: Ghi google-services.json (từ GitHub Secret)
+      - name: Cau hinh Google Services (FCM) neu co secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
-            echo "LỖI: chưa tạo secret GOOGLE_SERVICES_JSON_BASE64 — xem hướng dẫn trong comment ở bước này."
-            exit 1
+          set -e
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "CANH BAO: chua co secret GOOGLE_SERVICES_JSON - build van chay nhung FCM se KHONG hoat dong."
+            echo "Xem README.md muc 'Cau hinh Firebase (FCM)' de biet cach tao va them secret nay."
+            exit 0
           fi
-          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+          echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          echo "Da ghi android/app/google-services.json"
 
-      # Ghim đúng version Gradle/AGP/Kotlin đã biết chạy ổn định.
-      - name: Ghim version Gradle/AGP/Kotlin (AGP 8.3.0, Kotlin 1.9.24, Gradle 8.6)
-        run: |
-          SETTINGS="android/settings.gradle"
-          WRAPPER="android/gradle/wrapper/gradle-wrapper.properties"
-
-          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.3.0"/' "$SETTINGS"
-          sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.9.24"/' "$SETTINGS"
-          sed -i 's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.6-all.zip#' "$WRAPPER"
-
-          echo "--- settings.gradle ---"
-          cat "$SETTINGS"
-          echo "--- gradle-wrapper.properties ---"
-          cat "$WRAPPER"
-
-      # Gradle plugin của Firebase — đọc google-services.json vừa ghi ở
-      # trên rồi sinh cấu hình kết nối app vào đúng project Firebase.
-      - name: Thêm Google Services Gradle plugin
-        run: |
-          SETTINGS="android/settings.gradle"
-          APP_GRADLE="android/app/build.gradle"
-
-          if ! grep -q "com.google.gms.google-services" "$SETTINGS"; then
-            sed -i '/id "org.jetbrains.kotlin.android" version "1.9.24" apply false/a\    id "com.google.gms.google-services" version "4.4.2" apply false' "$SETTINGS"
+          # Bat plugin Google Services trong Gradle (Kotlin DSL, template
+          # Flutter moi) - chi them neu chua co, tranh them trung lap khi
+          # chay lai nhieu lan.
+          PROJECT_GRADLE="android/settings.gradle.kts"
+          APP_GRADLE="android/app/build.gradle.kts"
+          if [ -f "$PROJECT_GRADLE" ] && ! grep -q "com.google.gms.google-services" "$PROJECT_GRADLE"; then
+            sed -i '/id("dev.flutter.flutter-plugin-loader")/a\    id("com.google.gms.google-services") version "4.4.2" apply false' "$PROJECT_GRADLE"
           fi
-
-          if ! grep -q "com.google.gms.google-services" "$APP_GRADLE"; then
-            sed -i '/id "dev.flutter.flutter-gradle-plugin"/a\    id "com.google.gms.google-services"' "$APP_GRADLE"
+          if [ -f "$APP_GRADLE" ] && ! grep -q "com.google.gms.google-services" "$APP_GRADLE"; then
+            sed -i '/id("dev.flutter.flutter-gradle-plugin")/a\    id("com.google.gms.google-services")' "$APP_GRADLE"
           fi
+          echo "Da bat plugin Google Services trong Gradle (kiem tra lai android/app/build.gradle.kts neu build loi o buoc sau)."
 
-          echo "--- settings.gradle ---"; cat "$SETTINGS"
-          echo "--- app/build.gradle ---"; cat "$APP_GRADLE"
-
-      # 3 plugin (flutter_local_notifications, path_provider_android,
-      # workmanager) yeu cau NDK 25.1.8937393, cao hon ban Flutter tu chon
-      # mac dinh -> ghim thang NDK nay de tranh warning/loi thieu NDK.
-      - name: Ghim Android NDK 25.1.8937393
-        run: |
-          APP_GRADLE="android/app/build.gradle"
-          if grep -q "ndkVersion" "$APP_GRADLE"; then
-            sed -i 's/ndkVersion[[:space:]]*=.*/ndkVersion = "25.1.8937393"/' "$APP_GRADLE"
-          else
-            sed -i '/^android {/a\    ndkVersion = "25.1.8937393"' "$APP_GRADLE"
-          fi
-          cat "$APP_GRADLE"
-
-      # AGP tự chạy "lint vital" khi build release, có thể fail build vì
-      # lỗi lint đến từ chính các plugin bên thứ 3 (flutter_local_notifications,
-      # workmanager...) chứ không phải lỗi trong code của bạn -> tắt hẳn để
-      # tránh build bị chặn bởi lint không liên quan.
-      - name: Tắt lint-vital khi build release
-        run: |
-          APP_GRADLE="android/app/build.gradle"
-          if ! grep -q "checkReleaseBuilds" "$APP_GRADLE"; then
-            sed -i '/^android {/a\    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }' "$APP_GRADLE"
-          fi
-          cat "$APP_GRADLE"
-
-      # flutter_local_notifications yêu cầu bật "core library desugaring"
-      # (báo lỗi checkReleaseAarMetadata nếu thiếu) -> tự thêm cấu hình
-      # compileOptions.coreLibraryDesugaringEnabled + dependency
-      # desugar_jdk_libs vào build.gradle.
-      - name: Bật Core Library Desugaring (flutter_local_notifications yêu cầu)
-        run: |
-          APP_GRADLE="android/app/build.gradle"
-
-          if ! grep -q "coreLibraryDesugaringEnabled" "$APP_GRADLE"; then
-            sed -i '/compileOptions {/a\        coreLibraryDesugaringEnabled true' "$APP_GRADLE"
-          fi
-
-          if ! grep -q "desugar_jdk_libs" "$APP_GRADLE"; then
-            if grep -qE "^dependencies[[:space:]]*\{[[:space:]]*\}" "$APP_GRADLE"; then
-              # có khối dependencies nhưng rỗng trên 1 dòng: dependencies {}
-              sed -i 's/^dependencies[[:space:]]*{[[:space:]]*}/dependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}/' "$APP_GRADLE"
-            elif grep -q "^dependencies {" "$APP_GRADLE"; then
-              # có khối dependencies nhiều dòng: chèn ngay sau dòng mở "dependencies {"
-              sed -i '/^dependencies {/a\    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"' "$APP_GRADLE"
-            else
-              # template mới (Flutter 3.24+) không có sẵn khối dependencies nào -> tự thêm mới ở cuối file
-              printf '\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}\n' >> "$APP_GRADLE"
-            fi
-          fi
-
-          cat "$APP_GRADLE"
-
-      # Thêm quyền Internet + thông báo (Android 13+) vào AndroidManifest.
-      - name: Thêm quyền Internet + thông báo vào AndroidManifest
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
-            sed -i 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />#' "$MANIFEST"
-          fi
-          if ! grep -q "android.permission.POST_NOTIFICATIONS" "$MANIFEST"; then
-            sed -i 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />#' "$MANIFEST"
-          fi
-          cat "$MANIFEST"
-
-      # "flutter create" đặt tên hiển thị mặc định = --project-name (ở đây
-      # là "vn", chỉ dùng để ghép applicationId thành jp.devjlog.vn), nên
-      # cần ghi đè lại tên hiển thị thật của app.
-      - name: Đặt tên hiển thị app (Săn Chia Giải 535)
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i 's/android:label="[^"]*"/android:label="Săn Chia Giải 535"/' "$MANIFEST"
-          cat "$MANIFEST"
-
-      # AdMob BẮT BUỘC phải có thẻ meta-data này trong <application>, nếu
-      # không app sẽ crash ngay khi khởi động MobileAds.instance.initialize().
-      # App ID THẬT từ tài khoản AdMob (app "Săn Chia Giải 535").
-      - name: Thêm AdMob App ID vào AndroidManifest
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
-            sed -i 's#</application>#    <meta-data\n        android:name="com.google.android.gms.ads.APPLICATION_ID"\n        android:value="ca-app-pub-9611577327028569~2677067517" />\n</application>#' "$MANIFEST"
-          fi
-          cat "$MANIFEST"
-
-      # Widget màn hình chính Android (hiện giá trị Độc Đắc + kỳ quay gần
-      # nhất, không cần mở app). Vì thư mục android/ KHÔNG được lưu sẵn
-      # trong repo (CI tự "flutter create" sinh lại mỗi lần build ở bước
-      # trên), code Kotlin/XML của widget phải được ghi ra LẠI Ở ĐÂY mỗi
-      # lần build — package Kotlin phải khớp applicationId "jp.devjlog.vn".
-      - name: Thêm Home Screen Widget (giá trị Độc Đắc)
-        run: |
-          KOTLIN_DIR="android/app/src/main/kotlin/jp/devjlog/vn"
-          RES="android/app/src/main/res"
-          mkdir -p "$KOTLIN_DIR" "$RES/layout" "$RES/xml" "$RES/drawable"
-
-          cat > "$KOTLIN_DIR/JackpotWidgetProvider.kt" << 'KOTLIN_EOF'
-          package jp.devjlog.vn
-
-          import android.appwidget.AppWidgetManager
-          import android.content.Context
-          import android.content.SharedPreferences
-          import android.widget.RemoteViews
-          import es.antonborri.home_widget.HomeWidgetLaunchIntent
-          import es.antonborri.home_widget.HomeWidgetProvider
-
-          /**
-           * Widget man hinh chinh: hien gia tri giai Doc Dac + ky quay gan
-           * nhat. Du lieu duoc Flutter ghi qua goi home_widget moi khi kiem
-           * tra xong (thu cong hoac nen) - widget nay chi doc lai va ve ra,
-           * khong tu goi mang.
-           */
-          class JackpotWidgetProvider : HomeWidgetProvider() {
-              override fun onUpdate(
-                  context: Context,
-                  appWidgetManager: AppWidgetManager,
-                  appWidgetIds: IntArray,
-                  widgetData: SharedPreferences,
-              ) {
-                  appWidgetIds.forEach { widgetId ->
-                      val views = RemoteViews(context.packageName, R.layout.jackpot_widget_layout).apply {
-                          val jackpot = widgetData.getString("widget_jackpot", null) ?: "—"
-                          val drawLabel = widgetData.getString("widget_draw_label", null) ?: "Săn Chia Giải 535"
-                          val nextDraw = widgetData.getString("widget_next_draw", null) ?: ""
-
-                          setTextViewText(R.id.widget_jackpot_value, jackpot)
-                          setTextViewText(R.id.widget_draw_label, drawLabel)
-                          setTextViewText(R.id.widget_next_draw, nextDraw)
-
-                          val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java)
-                          setOnClickPendingIntent(R.id.widget_root, pendingIntent)
-                      }
-                      appWidgetManager.updateAppWidget(widgetId, views)
-                  }
-              }
-          }
-          KOTLIN_EOF
-
-          cat > "$RES/layout/jackpot_widget_layout.xml" << 'XML_EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:id="@+id/widget_root"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:orientation="vertical"
-              android:padding="14dp"
-              android:background="@drawable/widget_background">
-
-              <TextView
-                  android:id="@+id/widget_draw_label"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="Săn Chia Giải 535"
-                  android:textColor="#FFFFF7E8"
-                  android:textSize="11sp"
-                  android:shadowColor="#B0000000"
-                  android:shadowRadius="3"
-                  android:shadowDx="0"
-                  android:shadowDy="1" />
-
-              <TextView
-                  android:id="@+id/widget_jackpot_value"
-                  android:layout_width="wrap_content"
-                  android:layout_height="wrap_content"
-                  android:layout_marginTop="4dp"
-                  android:text="—"
-                  android:textColor="#FFFFFFFF"
-                  android:textStyle="bold"
-                  android:textSize="18sp"
-                  android:shadowColor="#B0000000"
-                  android:shadowRadius="3"
-                  android:shadowDx="0"
-                  android:shadowDy="1" />
-
-              <TextView
-                  android:id="@+id/widget_next_draw"
-                  android:layout_width="wrap_content"
-                  android:layout_height="wrap_content"
-                  android:layout_marginTop="4dp"
-                  android:text=""
-                  android:textColor="#FFFFF7E8"
-                  android:textSize="11sp"
-                  android:shadowColor="#B0000000"
-                  android:shadowRadius="3"
-                  android:shadowDx="0"
-                  android:shadowDy="1" />
-          </LinearLayout>
-          XML_EOF
-
-          cat > "$RES/drawable/widget_background.xml" << 'XML_EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-              <solid android:color="#FFA61C1C" />
-              <corners android:radius="16dp" />
-          </shape>
-          XML_EOF
-
-          cat > "$RES/xml/jackpot_widget_info.xml" << 'XML_EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-              android:minWidth="180dp"
-              android:minHeight="90dp"
-              android:updatePeriodMillis="10800000"
-              android:initialLayout="@layout/jackpot_widget_layout"
-              android:resizeMode="horizontal|vertical"
-              android:widgetCategory="home_screen" />
-          XML_EOF
-
-          # Dang ky receiver trong AndroidManifest.
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "JackpotWidgetProvider" "$MANIFEST"; then
-            sed -i 's#</application>#    <receiver\n        android:name="jp.devjlog.vn.JackpotWidgetProvider"\n        android:exported="true">\n        <intent-filter>\n            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n        </intent-filter>\n        <meta-data\n            android:name="android.appwidget.provider"\n            android:resource="@xml/jackpot_widget_info" />\n    </receiver>\n</application>#' "$MANIFEST"
-          fi
-          cat "$MANIFEST"
-
-      # Plugin workmanager (0.5.2) kéo về androidx.work:work-runtime-ktx:2.7.1,
-      # trong khi 1 lib khác trong project lại kéo về
-      # androidx.work:work-runtime:2.8.1 -> 2 version khác nhau của cùng 1
-      # nhóm thư viện chứa các class trùng tên (OneTimeWorkRequestKt,
-      # PeriodicWorkRequestKt) -> lỗi "Duplicate class" khi build release
-      # (task checkReleaseDuplicateClasses). Ép toàn bộ project chỉ dùng
-      # đúng 1 version (2.8.1, bản mới nhất trong 2 bản) để tránh xung đột.
-      - name: Ép version androidx.work (fix Duplicate class work-runtime)
-        run: |
-          APP_GRADLE="android/app/build.gradle"
-          if ! grep -q "work-runtime-ktx" "$APP_GRADLE"; then
-            printf '\nconfigurations.all {\n    exclude group: "androidx.work", module: "work-runtime-ktx"\n}\n' >> "$APP_GRADLE"
-          fi
-          cat "$APP_GRADLE"
-
-      - name: Cài dependencies
+      - name: flutter pub get
         run: flutter pub get
 
-      - name: Tạo app icon (flutter_launcher_icons)
-        run: dart run flutter_launcher_icons
-
-      # Man hinh splash NATIVE - chay SAU buoc icon o tren vi splash generator
-      # doc anh tu asset (khong lien quan icon vua sinh), nhung can chay
-      # truoc build de kip ghi vao android/ moi duoc "flutter create" lai.
-      - name: Tạo màn hình splash (flutter_native_splash)
-        run: dart run flutter_native_splash:create
-
-      # KÝ RELEASE BẰNG KEYSTORE THẬT (thay vì debug key mặc định) - bắt
-      # buộc để nộp lên OPPO App Market (và mọi kho ứng dụng nghiêm túc
-      # khác đều từ chối file ký debug). Keystore được lưu dưới dạng base64
-      # trong GitHub Secret (KHÔNG commit file .jks vào repo - lộ ra là mất
-      # quyền kiểm soát app), giải mã ra file tạm ngay trong lần chạy này,
-      # không lưu lại giữa các lần build.
-      #
-      # QUAN TRỌNG: giữ file .jks gốc và 4 secret này thật kỹ. Mất là
-      # KHÔNG THỂ cập nhật app cũ trên OPPO Market nữa (chữ ký không khớp
-      # bản đã nộp trước đó) - phải tạo app mới, người dùng cũ phải gỡ cài
-      # thủ công rồi cài lại từ đầu.
-      - name: Giải mã keystore ký release
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          set -e
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Thiếu secret KEYSTORE_BASE64 - không thể ký release. Vào Settings > Secrets and variables > Actions để thêm."
-            exit 1
-          fi
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release-keystore.jks
-
-      - name: Cấu hình ký release trong build.gradle
-        run: |
-          set -e
-          APP_GRADLE="android/app/build.gradle"
-
-          if ! grep -q "signingConfigs {" "$APP_GRADLE"; then
-            sed -i '/^android {/a\    signingConfigs {\n        release {\n            storeFile file("release-keystore.jks")\n            storePassword System.getenv("KEYSTORE_PASSWORD")\n            keyAlias System.getenv("KEY_ALIAS")\n            keyPassword System.getenv("KEY_PASSWORD")\n        }\n    }' "$APP_GRADLE"
-          fi
-
-          # Flutter mac dinh sinh "signingConfig signingConfigs.debug" trong
-          # buildTypes.release (de "flutter run --release" chay duoc ngay
-          # khong can cau hinh gi) - doi sang signingConfigs.release vua
-          # them o tren.
-          sed -i 's/signingConfig signingConfigs\.debug/signingConfig signingConfigs.release/' "$APP_GRADLE"
-
-          cat "$APP_GRADLE"
-
-      - name: Build APK (release)
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: flutter build apk --release
         run: flutter build apk --release
 
-      # OPPO App Market (va nhieu kho ung dung khac) hoi van tay chu ky
-      # (SHA-1/SHA-256) luc dang ky app - in san ra day de khoi phai tu
-      # chay keytool tren may rieng.
-      - name: In vân tay chữ ký (cần khi đăng ký OPPO App Market)
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: |
-          keytool -list -v \
-            -keystore android/app/release-keystore.jks \
-            -alias "$KEY_ALIAS" \
-            -storepass "$KEYSTORE_PASSWORD" \
-            | grep -E "SHA1:|SHA256:|Owner:"
-
-      # Upload APK làm artifact của lần chạy này -> tải về từ tab Actions,
-      # không cần cấu hình gì thêm.
-      - name: Upload APK artifact
+      - name: Upload APK (artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: san-giai-535-apk
+          name: gplxvn-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 30
 
-      # Nếu commit này có gắn tag (vd git tag v1.0.0 && git push --tags),
-      # tự động tạo 1 GitHub Release và đính kèm APK vào đó luôn.
-      - name: Tạo Release (chỉ khi có tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Tao GitHub Release kem APK
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: build-${{ github.run_number }}
+          name: "San Chia Giai 535 - build ${{ github.run_number }}"
           files: build/app/outputs/flutter-apk/app-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true
