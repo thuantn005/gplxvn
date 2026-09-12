@@ -31,6 +31,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Kiem tra da co code app (pubspec.yaml) o goc repo chua
+        run: |
+          if [ ! -f pubspec.yaml ]; then
+            echo "::error::Khong thay pubspec.yaml o goc repo - code app (zip) chua duoc"
+            echo "::error::giai nen vao repo. Vao GitHub -> Add file -> Upload files -> tha"
+            echo "::error::file zip code app vao -> Commit vao main. Doi workflow 'Tu dong"
+            echo "::error::giai nen...' chay xong roi hang build_apk.yml se tu chay tiep."
+            exit 1
+          fi
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
